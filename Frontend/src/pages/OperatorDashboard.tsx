@@ -1,5 +1,15 @@
 import React, { useMemo, useState, useEffect } from "react";
 import { useAudit } from "../audit/AuditStore";
+import {
+  Phone,
+  MapPin,
+  ClipboardList,
+  ShieldAlert,
+  Activity,
+  Flame,
+  Search,
+  PlusCircle,
+} from "lucide-react";
 
 type CallStatus = "PENDING" | "IN_PROGRESS" | "CLOSED";
 type EmergencyType = "MEDICAL" | "FIRE" | "POLICE" | "OTHER";
@@ -24,8 +34,6 @@ export default function OperatorDashboard() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSimulating, setIsSimulating] = useState(false);
   const [q, setQ] = useState("");
-  const { log } = useAudit();
-
   const [isMobile, setIsMobile] = useState(window.innerWidth < 1024);
 
   useEffect(() => {
@@ -51,9 +59,10 @@ export default function OperatorDashboard() {
 
   useEffect(() => {
     fetchCalls();
+    const interval = setInterval(fetchCalls, 5000);
+    return () => clearInterval(interval);
   }, []);
 
-  // --- LOGICĂ AUDIT ---
   const logAuditAction = async (action: string, details: string) => {
     try {
       await fetch(AUDIT_URL, {
@@ -71,29 +80,30 @@ export default function OperatorDashboard() {
     }
   };
 
+  const selected = useMemo(
+    () => calls.find((c) => c.id === selectedId) ?? null,
+    [calls, selectedId],
+  );
+
   const handleTakeCall = async () => {
     if (!selected) return;
-
     try {
-      // PASUL 1: Actualizăm statusul apelului în baza de date Azure
       const response = await fetch(`${API_URL}/${selected.id}`, {
-        method: "PATCH", // sau PUT, depinde cum ai în .NET
+        method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status: "IN_PROGRESS" }),
       });
 
       if (response.ok) {
-        // PASUL 2: Dacă statusul s-a schimbat, logăm în Audit
-        await logAuditAction(
-          "PRELUARE_APEL",
-          `Operatorul a preluat apelul ${selected.id.substring(0, 8)} de la ${selected.callerNumber}`,
-        );
-
+        // --- REPARARE: REINTRODUCERE ALERTĂ CONFIRMARE ---
         alert(
           `Apelul de la ${selected.callerNumber} a fost marcat ca 'ÎN LUCRU'.`,
         );
 
-        // PASUL 3: Reîncărcăm lista pentru a vedea schimbarea (va apărea verde/albastru în loc de roșu)
+        await logAuditAction(
+          "PRELUARE_APEL",
+          `Operatorul a preluat apelul ${selected.id.substring(0, 8)} de la ${selected.callerNumber}`,
+        );
         await fetchCalls();
       } else {
         alert("Eroare la actualizarea statusului în baza de date.");
@@ -105,81 +115,65 @@ export default function OperatorDashboard() {
 
   const handleCreateIntervention = async () => {
     if (!selected) return;
+
     await logAuditAction(
       "CREARE_INTERVENTIE",
-      `Intervenție lansată pentru ${selected.emergencyType} la coordonatele ${selected.latitude}, ${selected.longitude}`,
+      `Interventie lansata pentru ${selected.emergencyType} la locatia detectata.`,
     );
-    alert("Intervenția a fost înregistrată și trimisă echipajelor din teren.");
+
+    // --- REPARARE: REINTRODUCERE ALERTĂ CONFIRMARE ---
+    alert("Interventia a fost inregistrata.");
   };
 
-  // --- REVERSE GEOCODING (Transformă GPS în Adresă Reală) ---
   const getAddressFromGPS = async (lat: number, lng: number) => {
     try {
+      await new Promise((resolve) => setTimeout(resolve, 800));
       const response = await fetch(
         `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1`,
+        { headers: { "Accept-Language": "ro" } },
       );
+      if (response.status === 429)
+        return "Identificare in curs (limitare server)...";
       const data = await response.json();
-      // Extragem doar strada și numărul dacă există, altfel returnăm locația completă
       return data.display_name.split(",").slice(0, 2).join(",");
     } catch (error) {
-      return "Adresă detectată prin satelit";
+      return "Identificare...";
     }
   };
 
-  // --- GENERATORUL DE URGENȚE INTELIGENT ---
   const simulateIncomingCall = async () => {
     setIsSimulating(true);
-
     const locations = [
       {
-        name: "Piața Universității",
-        lat: 44.4355,
-        lng: 26.1025,
-        landmarks: "lângă Statui / Facultatea de Istorie",
+        name: "Piata Universitatii",
+        lat: 44.43552,
+        lng: 26.10251,
+        landmarks: "langa Statui",
       },
       {
-        name: "Piața Unirii",
-        lat: 44.4273,
-        lng: 26.1042,
-        landmarks: "zona Fântâni / Magazinul Unirea",
+        name: "Piata Unirii",
+        lat: 44.42735,
+        lng: 26.10424,
+        landmarks: "zona Fantani",
       },
       {
-        name: "Piața Victoriei",
-        lat: 44.4517,
-        lng: 26.0859,
-        landmarks: "lângă Guvernul României / Muzeul Antipa",
+        name: "Piata Victoriei",
+        lat: 44.45171,
+        lng: 26.08592,
+        landmarks: "langa Guvern",
       },
       {
         name: "Arcul de Triumf",
-        lat: 44.4673,
-        lng: 26.0784,
-        landmarks: "intersecția Kiseleff cu Prezan",
-      },
-      {
-        name: "Piața Romană",
-        lat: 44.4473,
-        lng: 26.0967,
-        landmarks: "lângă coloane / ASE",
+        lat: 44.46733,
+        lng: 26.07845,
+        landmarks: "intersectia Kiseleff",
       },
     ];
 
     const scenarios = [
-      {
-        type: "MEDICAL" as EmergencyType,
-        desc: "Persoană inconștientă, posibil stop cardio-respirator",
-      },
-      {
-        type: "FIRE" as EmergencyType,
-        desc: "Incendiu la un etaj superior, se vede fum dens",
-      },
-      {
-        type: "POLICE" as EmergencyType,
-        desc: "Conflict agresiv între mai multe persoane",
-      },
-      {
-        type: "FIRE" as EmergencyType,
-        desc: "Accident rutier, victimă încarcerată, scurgeri de combustibil",
-      },
+      { type: "MEDICAL", desc: "Persoana inconstienta" },
+      { type: "FIRE", desc: "Incendiu etaj superior" },
+      { type: "POLICE", desc: "Conflict agresiv" },
     ];
 
     const spot = locations[Math.floor(Math.random() * locations.length)];
@@ -187,12 +181,11 @@ export default function OperatorDashboard() {
     const randomPhone =
       "07" + Math.floor(20000000 + Math.random() * 70000000).toString();
 
-    // Obținem adresa poștală reală
     const realAddress = await getAddressFromGPS(spot.lat, spot.lng);
 
     const payload = {
       callerNumber: randomPhone,
-      description: `[AML] Adresă: ${realAddress}. Repere: ${spot.name} (${spot.landmarks}). Incident: ${scenario.desc}.`,
+      description: `[AML] Adresa: ${realAddress}. Repere: ${spot.name} (${spot.landmarks}). Incident: ${scenario.desc}.`,
       emergencyType: scenario.type,
       latitude: spot.lat,
       longitude: spot.lng,
@@ -207,6 +200,10 @@ export default function OperatorDashboard() {
       });
 
       if (response.ok) {
+        await logAuditAction(
+          "SISTEM_APEL_NOU",
+          `Apel automat receptionat de la ${randomPhone}`,
+        );
         await fetchCalls();
         new Audio("https://actions.google.com/sounds/v1/alarms/beep_short.ogg")
           .play()
@@ -219,25 +216,15 @@ export default function OperatorDashboard() {
     }
   };
 
-  const selected = useMemo(
-    () => calls.find((c) => c.id === selectedId) ?? null,
-    [calls, selectedId],
-  );
-
-  // --- MOTORUL DE CĂUTARE ÎMBUNĂTĂȚIT (Fuzzy Search) ---
   const filtered = useMemo(() => {
-    const searchTerm = q.trim().toLowerCase();
-
+    const st = q.toLowerCase();
     return calls
-      .filter((c) => {
-        if (!searchTerm) return true;
-        return (
-          c.callerNumber.toLowerCase().includes(searchTerm) ||
-          c.emergencyType.toLowerCase().includes(searchTerm) ||
-          c.status.toLowerCase().includes(searchTerm) ||
-          (c.description || "").toLowerCase().includes(searchTerm)
-        );
-      })
+      .filter(
+        (c) =>
+          c.callerNumber.includes(st) ||
+          c.emergencyType.toLowerCase().includes(st) ||
+          (c.description || "").toLowerCase().includes(st),
+      )
       .sort(
         (a, b) =>
           new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
@@ -246,31 +233,27 @@ export default function OperatorDashboard() {
 
   if (isLoading)
     return (
-      <div style={{ padding: 40, color: "white" }}>Sistemul pornește...</div>
+      <div style={{ padding: 40, color: "white" }}>Sistemul porneste...</div>
     );
 
   return (
     <div style={styles.page}>
       <header
-        style={{
-          ...styles.header,
-          flexDirection: isMobile ? "column" : "row",
-          alignItems: isMobile ? "stretch" : "center",
-          gap: 15,
-        }}
+        style={{ ...styles.header, flexDirection: isMobile ? "column" : "row" }}
       >
         <div>
           <div style={styles.title}>Dispecerat 112</div>
           <div style={styles.subtitle}>
-            Sistem Integrat cu Reverse Geocoding & Audit
+            Consola Operator v3.0 - Monitorizare Live
           </div>
         </div>
         <button
           onClick={simulateIncomingCall}
           disabled={isSimulating}
-          style={{ ...styles.primaryBtn, width: isMobile ? "100%" : "auto" }}
+          style={styles.primaryBtn}
         >
-          {isSimulating ? "Se preiau date..." : "SIMULEAZĂ APEL"}
+          <PlusCircle size={18} style={{ marginRight: 8 }} />
+          {isSimulating ? "Se preiau date..." : "SIMULEAZA APEL"}
         </button>
       </header>
 
@@ -280,17 +263,20 @@ export default function OperatorDashboard() {
           gridTemplateColumns: isMobile ? "1fr" : "1fr 1.5fr",
         }}
       >
-        <section
-          style={{ ...styles.panel, minHeight: isMobile ? "auto" : "600px" }}
-        >
+        <section style={styles.panel}>
           <div style={styles.panelHeader}>
-            <div style={styles.panelTitle}>Coadă Apeluri (Live)</div>
-            <input
-              placeholder="Caută număr, tip, stradă..."
-              value={q}
-              onChange={(e) => setQ(e.target.value)}
-              style={{ ...styles.search, width: isMobile ? "150px" : "200px" }}
-            />
+            <div style={styles.panelTitle}>
+              <Phone size={14} style={{ marginRight: 6 }} /> Coada Apeluri
+            </div>
+            <div style={styles.searchWrapper}>
+              <Search size={14} color="#666" />
+              <input
+                placeholder="Cauta..."
+                value={q}
+                onChange={(e) => setQ(e.target.value)}
+                style={styles.search}
+              />
+            </div>
           </div>
 
           <div style={styles.list}>
@@ -300,11 +286,9 @@ export default function OperatorDashboard() {
                 onClick={() => setSelectedId(c.id)}
                 style={{
                   ...styles.listItem,
-                  ...(c.id === selectedId ? styles.listItemSelected : null),
-                  borderLeft:
-                    c.status === "PENDING"
-                      ? "4px solid #e11d48"
-                      : "1px solid rgba(255,255,255,0.1)",
+                  ...(c.id === selectedId ? styles.listItemSelected : {}),
+                  borderLeftColor:
+                    c.status === "PENDING" ? "#e11d48" : "#3b82f6",
                 }}
               >
                 <div style={styles.listTopRow}>
@@ -316,7 +300,7 @@ export default function OperatorDashboard() {
                     })}
                   </div>
                 </div>
-                <div style={{ fontSize: 11, opacity: 0.6, marginTop: 5 }}>
+                <div style={{ fontSize: 11, opacity: 0.6, marginTop: 4 }}>
                   {c.emergencyType} • {c.status}
                 </div>
               </button>
@@ -324,16 +308,12 @@ export default function OperatorDashboard() {
           </div>
         </section>
 
-        <section
-          style={{ ...styles.panel, minHeight: isMobile ? "auto" : "600px" }}
-        >
+        <section style={styles.panel}>
           {selected ? (
             <div style={styles.details}>
               <div style={styles.panelTitle}>
-                Fișă Incident:{" "}
-                <span style={{ opacity: 0.5 }}>
-                  {selected.id.substring(0, 8)}
-                </span>
+                <ClipboardList size={16} style={{ marginRight: 8 }} /> Fisa
+                Incident: {selected.id.substring(0, 8)}
               </div>
 
               <div
@@ -343,59 +323,54 @@ export default function OperatorDashboard() {
                 }}
               >
                 <div style={styles.detailBlock}>
-                  <div style={styles.detailLabel}>NUMĂR APELANT</div>
+                  <div style={styles.detailLabel}>NUMAR APELANT</div>
                   <div style={styles.detailValue}>{selected.callerNumber}</div>
                 </div>
                 <div style={styles.detailBlock}>
-                  <div style={styles.detailLabel}>TIP URGENȚĂ</div>
+                  <div style={styles.detailLabel}>TIP URGENTA</div>
                   <div style={styles.detailValue}>{selected.emergencyType}</div>
                 </div>
               </div>
 
               <div style={styles.detailBlockFull}>
-                <div style={styles.detailLabel}>COORDONATE GPS (AML)</div>
+                <div style={styles.detailLabel}>
+                  <MapPin size={12} style={{ marginRight: 4 }} /> COORDONATE GPS
+                  (AML)
+                </div>
                 <div style={styles.detailValue}>
                   {selected.latitude}, {selected.longitude}
                 </div>
               </div>
 
               <div style={styles.detailBlockFull}>
-                <div style={styles.detailLabel}>
-                  DATE CONTEXTUALE (ADRESĂ, REPERE & DESCRIERE)
-                </div>
+                <div style={styles.detailLabel}>DATE CONTEXTUALE</div>
                 <div
                   style={{
                     ...styles.detailValue,
-                    lineHeight: "1.5",
                     fontWeight: "400",
+                    lineHeight: "1.6",
                   }}
                 >
                   {selected.description}
                 </div>
               </div>
 
-              <div
-                style={{
-                  ...styles.actions,
-                  flexDirection: isMobile ? "column" : "row",
-                }}
-              >
-                <button
-                  style={{ ...styles.primaryBtn, flex: 1 }}
-                  onClick={handleTakeCall}
-                >
+              <div style={styles.actions}>
+                <button style={styles.takeCallBtn} onClick={handleTakeCall}>
                   PREIA CAZUL
                 </button>
                 <button
-                  style={{ ...styles.secondaryBtn, flex: 1 }}
+                  style={styles.createIntBtn}
                   onClick={handleCreateIntervention}
                 >
-                  CREEAZĂ INTERVENȚIE
+                  CREEAZA INTERVENTIE
                 </button>
               </div>
             </div>
           ) : (
-            <div style={styles.empty}>Selectează un apel din listă.</div>
+            <div style={styles.empty}>
+              Selectati un apel din lista pentru detalii.
+            </div>
           )}
         </section>
       </main>
@@ -406,101 +381,139 @@ export default function OperatorDashboard() {
 const styles: Record<string, React.CSSProperties> = {
   page: {
     color: "#fff",
-    fontFamily: "system-ui",
-    padding: "10px",
-    maxWidth: "100%",
+    padding: "20px",
+    background: "#0f172a",
+    minHeight: "100vh",
   },
   header: {
     display: "flex",
     justifyContent: "space-between",
     marginBottom: "20px",
+    alignItems: "center",
   },
-  title: { fontSize: "22px", fontWeight: "bold" },
-  subtitle: { opacity: 0.6, fontSize: "13px" },
-  mainGrid: { display: "grid", gap: "15px" },
+  title: { fontSize: "24px", fontWeight: "bold", letterSpacing: "-0.5px" },
+  subtitle: { opacity: 0.5, fontSize: "13px" },
+  mainGrid: { display: "grid", gap: "20px" },
   panel: {
-    background: "#1a1a1a",
+    background: "#1e293b",
     borderRadius: "12px",
-    border: "1px solid #333",
-    overflowY: "auto",
+    border: "1px solid #334155",
+    display: "flex",
+    flexDirection: "column",
   },
   panelHeader: {
-    padding: "12px",
-    borderBottom: "1px solid #333",
+    padding: "15px",
+    borderBottom: "1px solid #334155",
     display: "flex",
     justifyContent: "space-between",
     alignItems: "center",
   },
   panelTitle: {
     fontWeight: "bold",
-    fontSize: "13px",
+    fontSize: "12px",
     textTransform: "uppercase",
+    display: "flex",
+    alignItems: "center",
+    color: "#94a3b8",
   },
-  list: { padding: "8px" },
+  searchWrapper: {
+    display: "flex",
+    alignItems: "center",
+    background: "#0f172a",
+    padding: "4px 10px",
+    borderRadius: "6px",
+  },
+  search: {
+    background: "transparent",
+    border: "none",
+    color: "#fff",
+    marginLeft: "8px",
+    outline: "none",
+    fontSize: "13px",
+  },
+  list: { padding: "10px", overflowY: "auto", maxHeight: "70vh" },
   listItem: {
     width: "100%",
     textAlign: "left",
     padding: "12px",
-    background: "#222",
+    background: "#334155",
     borderRadius: "8px",
     color: "#fff",
     marginBottom: "8px",
     cursor: "pointer",
-    borderStyle: "solid",
-    borderWidth: "1px 1px 1px 4px", // Sus, Dreapta, Jos, Stânga
+    border: "1px solid transparent",
+    borderLeftWidth: "4px",
+    transition: "all 0.2s",
   },
-  listItemSelected: { background: "#333", borderColor: "#e11d48" },
-  listTopRow: { display: "flex", justifyContent: "space-between" },
+  listItemSelected: {
+    background: "#475569",
+    borderColor: "rgba(255,255,255,0.1)",
+  },
+  listTopRow: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
   callId: { fontWeight: "bold", fontSize: "14px" },
   time: { fontSize: "11px", opacity: 0.5 },
-  details: { padding: "15px" },
-  detailsGrid: { display: "grid", gap: "10px", marginTop: "15px" },
+  details: { padding: "20px" },
+  detailsGrid: { display: "grid", gap: "12px", marginTop: "20px" },
   detailBlock: {
     padding: "12px",
-    background: "#222",
+    background: "#0f172a",
     borderRadius: "8px",
-    border: "1px solid #333",
+    border: "1px solid #334155",
   },
   detailBlockFull: {
     padding: "12px",
-    background: "#222",
+    background: "#0f172a",
     borderRadius: "8px",
-    border: "1px solid #333",
-    marginTop: "10px",
+    border: "1px solid #334155",
+    marginTop: "12px",
   },
-  detailLabel: { fontSize: "9px", opacity: 0.5, marginBottom: "3px" },
-  detailValue: { fontWeight: "bold", fontSize: "13px" },
-  actions: { marginTop: "20px", display: "flex", gap: "10px" },
+  detailLabel: {
+    fontSize: "10px",
+    color: "#64748b",
+    marginBottom: "6px",
+    fontWeight: "bold",
+  },
+  detailValue: { fontWeight: "bold", fontSize: "14px" },
+  actions: { marginTop: "30px", display: "flex", gap: "12px" },
   primaryBtn: {
-    padding: "12px",
+    padding: "10px 20px",
     borderRadius: "8px",
-    border: "1px solid #e11d48",
+    background: "#3b82f6",
+    color: "#fff",
+    fontWeight: "bold",
+    cursor: "pointer",
+    border: "none",
+    display: "flex",
+    alignItems: "center",
+  },
+  takeCallBtn: {
+    flex: 1,
+    padding: "14px",
+    borderRadius: "8px",
     background: "#e11d48",
     color: "#fff",
     fontWeight: "bold",
     cursor: "pointer",
+    border: "none",
   },
-  secondaryBtn: {
-    padding: "12px",
+  createIntBtn: {
+    flex: 1,
+    padding: "14px",
     borderRadius: "8px",
-    border: "1px solid #444",
-    background: "#333",
+    background: "#334155",
     color: "#fff",
     fontWeight: "bold",
     cursor: "pointer",
-  },
-  search: {
-    background: "#000",
-    border: "1px solid #444",
-    color: "#fff",
-    borderRadius: "8px",
-    padding: "8px 12px",
-    outline: "none",
+    border: "1px solid #475569",
   },
   empty: {
-    padding: "50px",
+    padding: "100px 20px",
     textAlign: "center",
-    opacity: 0.3,
-    fontSize: "13px",
+    color: "#64748b",
+    fontSize: "14px",
   },
 };

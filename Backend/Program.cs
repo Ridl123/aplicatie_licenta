@@ -1,5 +1,5 @@
 using Microsoft.EntityFrameworkCore;
-using Backend.Data; // Asigură-te că namespace-ul corespunde cu cel din ApplicationDbContext.cs
+using Backend.Data;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -13,10 +13,10 @@ builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
-// 3. Configurare CORS (foarte important pentru React)
+// 3. Configurare CORS (O singură politică, clară)
 builder.Services.AddCors(options =>
 {
-    options.AddPolicy("AllowReactApp",
+    options.AddPolicy("AllowAll",
         policy => policy.AllowAnyOrigin()
                         .AllowAnyMethod()
                         .AllowAnyHeader());
@@ -31,13 +31,11 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
+// FOARTE IMPORTANT: UseCors trebuie să fie ÎNAINTE de MapControllers și după UseRouting (dacă există)
+app.UseCors("AllowAll");
+
 app.UseHttpsRedirection();
-
-// Activează politica de CORS
-app.UseCors("AllowReactApp");
-
 app.UseAuthorization();
-
 app.MapControllers();
 
 app.Run();

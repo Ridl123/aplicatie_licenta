@@ -1,5 +1,12 @@
 import React, { useEffect, useState } from "react";
-import { ClipboardList, ShieldCheck, Search } from "lucide-react";
+import {
+  ShieldCheck,
+  Search,
+  Clock,
+  User,
+  Activity,
+  FileText,
+} from "lucide-react";
 
 type AuditLog = {
   id: number;
@@ -14,25 +21,35 @@ export default function AuditPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const API_URL = "http://localhost:5023/api/Audit";
 
-  useEffect(() => {
-    fetch(API_URL)
+  const fetchLogs = () => {
+    fetch(`${API_URL}?t=${new Date().getTime()}`)
       .then((res) => res.json())
-      .then((data) =>
-        setLogs(
-          data.sort(
-            (a: any, b: any) =>
-              new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime(),
-          ),
-        ),
-      )
-      .catch((err) => console.error("Eroare Audit:", err));
+      .then((data) => {
+        // Sortare descrescatoare pentru a vedea actiunile recente primele
+        // Verificam atat timestamp cat si Timestamp (pentru compatibilitate .NET)
+        const sortedData = data.sort(
+          (a: any, b: any) =>
+            new Date(b.timestamp || b.Timestamp).getTime() -
+            new Date(a.timestamp || a.Timestamp).getTime(),
+        );
+        setLogs(sortedData);
+      })
+      .catch((err) => console.error("Eroare incarcare Audit:", err));
+  };
+
+  useEffect(() => {
+    fetchLogs();
+    const interval = setInterval(fetchLogs, 5000);
+    return () => clearInterval(interval);
   }, []);
 
-  const filteredLogs = logs.filter(
-    (log) =>
-      log.details.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      log.action.toLowerCase().includes(searchTerm.toLowerCase()),
-  );
+  const filteredLogs = logs.filter((log: any) => {
+    const s = searchTerm.toLowerCase();
+    const details = (log.details || log.Details || "").toLowerCase();
+    const action = (log.action || log.Action || "").toLowerCase();
+    const opId = (log.operatorId || log.OperatorId || "").toLowerCase();
+    return details.includes(s) || action.includes(s) || opId.includes(s);
+  });
 
   return (
     <div style={styles.container}>
@@ -42,10 +59,11 @@ export default function AuditPage() {
           <h1 style={styles.title}>Jurnal Audit Sistem</h1>
         </div>
         <div style={styles.searchBox}>
-          <Search size={18} style={{ opacity: 0.5 }} />
+          <Search size={18} color="#64748b" />
           <input
-            placeholder="Caută în log-uri..."
+            placeholder="Cauta in log-uri (Operator, Actiune...)"
             style={styles.input}
+            value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
           />
         </div>
@@ -55,51 +73,83 @@ export default function AuditPage() {
         <table style={styles.table}>
           <thead>
             <tr>
-              <th style={styles.th}>Data / Ora</th>
-              <th style={styles.th}>Operator</th>
-              <th style={styles.th}>Acțiune</th>
-              <th style={styles.th}>Detalii</th>
+              <th style={styles.th}>
+                <Clock size={14} style={styles.iconInline} /> Data / Ora
+              </th>
+              <th style={styles.th}>
+                <User size={14} style={styles.iconInline} /> Operator
+              </th>
+              <th style={styles.th}>
+                <Activity size={14} style={styles.iconInline} /> Actiune
+              </th>
+              <th style={styles.th}>
+                <FileText size={14} style={styles.iconInline} /> Detalii
+                Suplimentare
+              </th>
             </tr>
           </thead>
           <tbody>
-            {filteredLogs.map((log) => (
-              <tr key={log.id} style={styles.tr}>
+            {filteredLogs.map((log: any) => (
+              <tr key={log.id || log.Id} style={styles.tr}>
                 <td style={styles.td}>
-                  {new Date(log.timestamp).toLocaleString("ro-RO")}
+                  {new Date(log.timestamp || log.Timestamp).toLocaleString(
+                    "ro-RO",
+                  )}
                 </td>
                 <td style={styles.td}>
-                  <span style={styles.opBadge}>{log.operatorId}</span>
+                  <span style={styles.opBadge}>
+                    {log.operatorId || log.OperatorId}
+                  </span>
                 </td>
                 <td style={styles.td}>
-                  <strong>{log.action}</strong>
+                  <strong style={{ color: "#34d399" }}>
+                    {(log.action || log.Action || "").toUpperCase()}
+                  </strong>
                 </td>
-                <td style={styles.td}>{log.details}</td>
+                <td style={styles.td}>{log.details || log.Details}</td>
               </tr>
             ))}
           </tbody>
         </table>
+
+        {filteredLogs.length === 0 && (
+          <div style={styles.emptyState}>
+            Nu exista inregistrari in jurnalul de audit care sa corespunda
+            cautarii.
+          </div>
+        )}
       </div>
     </div>
   );
 }
 
 const styles: Record<string, React.CSSProperties> = {
-  container: { padding: "20px", color: "#fff" },
+  container: {
+    padding: "30px",
+    color: "#f8fafc",
+    background: "#0f172a",
+    minHeight: "100vh",
+  },
   header: {
     display: "flex",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: "30px",
+    marginBottom: "25px",
     flexWrap: "wrap",
-    gap: "20px",
+    gap: "15px",
   },
-  title: { fontSize: "24px", fontWeight: 800, margin: 0 },
+  title: {
+    fontSize: "24px",
+    fontWeight: 700,
+    margin: 0,
+    letterSpacing: "-0.5px",
+  },
   searchBox: {
     display: "flex",
     alignItems: "center",
     gap: 10,
     background: "#1e293b",
-    padding: "10px 15px",
+    padding: "8px 15px",
     borderRadius: "10px",
     border: "1px solid #334155",
   },
@@ -108,31 +158,52 @@ const styles: Record<string, React.CSSProperties> = {
     border: "none",
     color: "#fff",
     outline: "none",
-    width: "200px",
+    width: "280px",
+    fontSize: "14px",
   },
   tableWrapper: {
     background: "#111827",
-    borderRadius: "15px",
+    borderRadius: "12px",
     border: "1px solid #334155",
     overflow: "hidden",
+    boxShadow: "0 10px 15px -3px rgba(0, 0, 0, 0.1)",
   },
   table: { width: "100%", borderCollapse: "collapse", textAlign: "left" },
   th: {
     padding: "15px",
     background: "#1f2937",
     color: "#94a3b8",
-    fontSize: "12px",
+    fontSize: "11px",
     textTransform: "uppercase",
-    letterSpacing: "1px",
+    letterSpacing: "0.1em",
+    borderBottom: "1px solid #334155",
   },
-  td: { padding: "15px", borderBottom: "1px solid #1f2937", fontSize: "14px" },
-  tr: { transition: "background 0.2s", cursor: "default" },
+  td: {
+    padding: "15px",
+    borderBottom: "1px solid #1f2937",
+    fontSize: "13px",
+    color: "#cbd5e1",
+  },
+  tr: {
+    transition: "background 0.2s",
+    cursor: "default",
+  },
   opBadge: {
     background: "#064e3b",
     color: "#34d399",
-    padding: "4px 8px",
+    padding: "4px 10px",
     borderRadius: "6px",
-    fontSize: "12px",
+    fontSize: "11px",
     fontWeight: 700,
+    fontFamily: "monospace",
+    border: "1px solid rgba(52, 211, 153, 0.2)",
+  },
+  iconInline: { marginBottom: "-2px", marginRight: "6px", opacity: 0.7 },
+  emptyState: {
+    padding: "60px",
+    textAlign: "center",
+    color: "#64748b",
+    fontSize: "14px",
+    background: "#111827",
   },
 };
