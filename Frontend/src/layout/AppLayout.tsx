@@ -1,11 +1,33 @@
 import { useState, useEffect } from "react";
-import { NavLink, Outlet, useLocation } from "react-router-dom";
-import { Menu, X, Radio, Map, History } from "lucide-react";
+import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
+import {
+  Menu,
+  X,
+  Radio,
+  Map,
+  History,
+  LogOut,
+  ShieldAlert,
+} from "lucide-react";
 
 export default function AppLayout() {
   const [isMobile, setIsMobile] = useState(window.innerWidth < 1024);
   const [menuOpen, setMenuOpen] = useState(false);
   const location = useLocation();
+  const navigate = useNavigate();
+
+  const token = localStorage.getItem("token");
+  const userRole = localStorage.getItem("role") || "Necunoscut";
+  // Dacă e GUEST afișăm "Vizitator", altfel "Operator/Admin"
+  const userName = userRole === "GUEST" ? "Vizitator" : "Operator Principal";
+
+  // --- BARIERA DE SECURITATE ---
+  // Dacă utilizatorul nu are token, îl trimitem imediat la Login
+  useEffect(() => {
+    if (!token) {
+      navigate("/login", { replace: true });
+    }
+  }, [token, navigate]);
 
   useEffect(() => {
     const handleResize = () => {
@@ -17,19 +39,25 @@ export default function AppLayout() {
     return () => window.removeEventListener("resize", handleResize);
   }, []);
 
-  // Închidem meniul automat când schimbăm pagina pe mobil
   useEffect(() => {
     setMenuOpen(false);
   }, [location]);
 
+  const handleLogout = () => {
+    localStorage.removeItem("token");
+    localStorage.removeItem("role");
+    navigate("/login", { replace: true });
+  };
+
+  // Dacă nu e logat, nu randăm interfața (va fi redirecționat de useEffect)
+  if (!token) return null;
+
   return (
     <div style={styles.shell}>
-      {/* Overlay pentru mobil când meniul e deschis - Z-INDEX 999 */}
       {isMobile && menuOpen && (
         <div style={styles.overlay} onClick={() => setMenuOpen(false)} />
       )}
 
-      {/* Sidebar - Z-INDEX 1000 */}
       <aside
         style={{
           ...styles.sidebar,
@@ -39,8 +67,13 @@ export default function AppLayout() {
         }}
       >
         <div style={styles.brand}>
-          <div style={styles.brandTitle}>112 DISPECERAT</div>
-          <div style={styles.brandSubtitle}>Operator Console</div>
+          <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+            <ShieldAlert size={28} color="#ef4444" />
+            <div>
+              <div style={styles.brandTitle}>S.I.U.</div>
+              <div style={styles.brandSubtitle}>Platformă Operativă</div>
+            </div>
+          </div>
         </div>
 
         <nav style={styles.nav}>
@@ -80,13 +113,32 @@ export default function AppLayout() {
 
           <div style={styles.topbarRight}>
             <div style={styles.userBox}>
-              <div style={styles.userName}>Operator</div>
-              {!isMobile && <div style={styles.userRole}>ROLE: OPERATOR</div>}
+              <div style={{ textAlign: "right" }}>
+                <div style={styles.userName}>{userName}</div>
+                {!isMobile && (
+                  <div
+                    style={{
+                      ...styles.userRole,
+                      color: userRole === "GUEST" ? "#facc15" : "#94a3b8",
+                    }}
+                  >
+                    ROLE: {userRole.toUpperCase()}
+                  </div>
+                )}
+              </div>
+
+              <button
+                onClick={handleLogout}
+                style={styles.logoutBtn}
+                title="Deconectare"
+              >
+                <LogOut size={20} />
+              </button>
             </div>
           </div>
         </header>
 
-        <main style={styles.main}>
+        <main style={{ ...styles.main, zIndex: 1 }}>
           <Outlet />
         </main>
       </div>
@@ -111,7 +163,7 @@ function NavItem({
         ...styles.navItem,
         background: isActive ? "rgba(255,255,255,0.08)" : "transparent",
         borderColor: isActive ? "rgba(255,255,255,0.2)" : "transparent",
-        pointerEvents: "auto", // Asigură capturarea click-ului
+        pointerEvents: "auto",
       })}
     >
       <span style={{ marginRight: 12, display: "flex", alignItems: "center" }}>
@@ -130,6 +182,7 @@ const styles: Record<string, React.CSSProperties> = {
     background: "#0b1220",
     overflow: "hidden",
   },
+
   sidebar: {
     width: 260,
     height: "100%",
@@ -140,36 +193,44 @@ const styles: Record<string, React.CSSProperties> = {
     flexDirection: "column",
     gap: 20,
     transition: "transform 0.3s ease",
-    zIndex: 1000, // Deasupra hărții
+    zIndex: 9999,
   },
+
   overlay: {
     position: "fixed",
     inset: 0,
     background: "rgba(0,0,0,0.5)",
-    zIndex: 999,
+    zIndex: 9998,
   },
+
   brand: {
     padding: 16,
     background: "rgba(255,255,255,0.03)",
     borderRadius: 12,
     border: "1px solid rgba(255,255,255,0.1)",
   },
+
   brandTitle: {
     fontWeight: 900,
     fontSize: 13,
     letterSpacing: 1,
+    color: "#fff",
   },
+
   brandSubtitle: {
     fontSize: 11,
     opacity: 0.5,
+    color: "#fff",
   },
+
   nav: {
     display: "flex",
     flexDirection: "column",
     gap: 8,
     position: "relative",
-    zIndex: 1001, // Peste sidebar pentru click-uri curate
+    zIndex: 10,
   },
+
   navItem: {
     display: "flex",
     alignItems: "center",
@@ -183,12 +244,14 @@ const styles: Record<string, React.CSSProperties> = {
     cursor: "pointer",
     position: "relative",
   },
+
   content: {
     flex: 1,
     display: "flex",
     flexDirection: "column",
     minWidth: 0,
   },
+
   topbar: {
     height: 70,
     display: "flex",
@@ -196,32 +259,84 @@ const styles: Record<string, React.CSSProperties> = {
     justifyContent: "space-between",
     padding: "0 20px",
     borderBottom: "1px solid rgba(255,255,255,0.1)",
+    color: "#fff",
   },
+
   topbarLeft: {
     display: "flex",
     alignItems: "center",
     gap: 15,
   },
+
+  topbarTitle: {
+    fontWeight: "bold",
+    fontSize: "1.1rem",
+  },
+
+  topbarHint: {
+    fontSize: "0.8rem",
+    opacity: 0.7,
+  },
+
   menuBtn: {
     background: "transparent",
     border: "none",
     color: "white",
     cursor: "pointer",
     padding: 5,
-    zIndex: 1002, // Peste tot
+    zIndex: 10000,
   },
+
+  topbarRight: {
+    display: "flex",
+    alignItems: "center",
+  },
+
+  userBox: {
+    display: "flex",
+    alignItems: "center",
+    gap: "15px",
+  },
+
+  userName: {
+    fontWeight: 600,
+    fontSize: "0.9rem",
+  },
+
+  userRole: {
+    fontSize: "0.75rem",
+    letterSpacing: "0.05em",
+  },
+
+  logoutBtn: {
+    background: "rgba(239, 68, 68, 0.1)",
+    color: "#ef4444",
+    border: "1px solid rgba(239, 68, 68, 0.2)",
+    borderRadius: "8px",
+    padding: "8px",
+    cursor: "pointer",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    transition: "background 0.2s",
+  },
+
   main: {
     flex: 1,
     overflowY: "auto",
     position: "relative",
   },
+
   sidebarFooter: {
     marginTop: "auto",
   },
+
   smallLabel: {
     fontSize: 12,
     opacity: 0.7,
+    color: "#fff",
   },
+
   pill: {
     display: "inline-block",
     padding: "4px 12px",
@@ -230,5 +345,6 @@ const styles: Record<string, React.CSSProperties> = {
     borderRadius: 20,
     fontSize: 11,
     fontWeight: 800,
+    marginTop: 5,
   },
 };

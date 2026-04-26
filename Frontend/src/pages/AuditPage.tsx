@@ -1,209 +1,186 @@
-import React, { useEffect, useState } from "react";
-import {
-  ShieldCheck,
-  Search,
-  Clock,
-  User,
-  Activity,
-  FileText,
-} from "lucide-react";
+import React, { useEffect, useState } from 'react';
+import api from '../api/axiosConfig';
+import { History, ShieldCheck, Clock, User } from 'lucide-react';
 
 type AuditLog = {
-  id: number;
-  operatorId: string;
-  action: string;
-  details: string;
-  timestamp: string;
+    id: number;
+    operatorId: string;
+    action: string;
+    details: string;
+    timestamp: string;
 };
 
 export default function AuditPage() {
-  const [logs, setLogs] = useState<AuditLog[]>([]);
-  const [searchTerm, setSearchTerm] = useState("");
-  const API_URL = "http://localhost:5023/api/Audit";
+    const [logs, setLogs] = useState<AuditLog[]>([]);
+    const [loading, setLoading] = useState(true);
 
-  const fetchLogs = () => {
-    fetch(`${API_URL}?t=${new Date().getTime()}`)
-      .then((res) => res.json())
-      .then((data) => {
-        // Sortare descrescatoare pentru a vedea actiunile recente primele
-        // Verificam atat timestamp cat si Timestamp (pentru compatibilitate .NET)
-        const sortedData = data.sort(
-          (a: any, b: any) =>
-            new Date(b.timestamp || b.Timestamp).getTime() -
-            new Date(a.timestamp || a.Timestamp).getTime(),
-        );
-        setLogs(sortedData);
-      })
-      .catch((err) => console.error("Eroare incarcare Audit:", err));
-  };
+    const fetchLogs = async () => {
+        try {
+            const response = await api.get('/Audit');
+            setLogs(response.data);
+        } catch (error) {
+            console.error("Eroare la încărcarea auditului:", error);
+        } finally {
+            setLoading(false);
+        }
+    };
 
-  useEffect(() => {
-    fetchLogs();
-    const interval = setInterval(fetchLogs, 5000);
-    return () => clearInterval(interval);
-  }, []);
+    useEffect(() => {
+        fetchLogs();
+        const interval = setInterval(fetchLogs, 10000); // Refresh la 10 secunde
+        return () => clearInterval(interval);
+    }, []);
 
-  const filteredLogs = logs.filter((log: any) => {
-    const s = searchTerm.toLowerCase();
-    const details = (log.details || log.Details || "").toLowerCase();
-    const action = (log.action || log.Action || "").toLowerCase();
-    const opId = (log.operatorId || log.OperatorId || "").toLowerCase();
-    return details.includes(s) || action.includes(s) || opId.includes(s);
-  });
+    const getActionColor = (action: string) => {
+        if (action.includes("CREARE")) return "#3b82f6"; // Albastru
+        if (action.includes("INCHIDERE")) return "#22c55e"; // Verde
+        if (action.includes("APEL_NOU")) return "#ef4444"; // Roșu
+        return "#94a3b8"; // Gri
+    };
 
-  return (
-    <div style={styles.container}>
-      <header style={styles.header}>
-        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          <ShieldCheck size={32} color="#10b981" />
-          <h1 style={styles.title}>Jurnal Audit Sistem</h1>
+    return (
+        <div style={styles.container}>
+            <header style={styles.header}>
+                <div>
+                    <h1 style={styles.title}><History style={{marginRight: 10}} /> Jurnal Audit Sistem</h1>
+                    <p style={styles.subtitle}>Trasabilitatea acțiunilor efectuate de operatori</p>
+                </div>
+                <div style={styles.badge}>
+                    <ShieldCheck size={16} style={{marginRight: 5}} /> SECURIZAT
+                </div>
+            </header>
+
+            <div style={styles.tableWrapper}>
+                {loading ? (
+                    <div style={{padding: 20, color: '#94a3b8'}}>Se încarcă logurile...</div>
+                ) : (
+                    <table style={styles.table}>
+                        <thead>
+                            <tr>
+                                <th style={styles.th}><Clock size={14} /> TIMP</th>
+                                <th style={styles.th}><User size={14} /> OPERATOR</th>
+                                <th style={styles.th}>ACȚIUNE</th>
+                                <th style={styles.th}>DETALII EVENIMENT</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {logs.map((log) => (
+                                <tr key={log.id} style={styles.tr}>
+                                    <td style={styles.td}>
+                                        {new Date(log.timestamp).toLocaleString('ro-RO', { 
+                                            day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' 
+                                        })}
+                                    </td>
+                                    <td style={styles.td}>
+                                        <span style={styles.operatorBadge}>{log.operatorId}</span>
+                                    </td>
+                                    <td style={styles.td}>
+                                        <span style={{
+                                            ...styles.actionBadge, 
+                                            backgroundColor: `${getActionColor(log.action)}22`,
+                                            color: getActionColor(log.action),
+                                            borderColor: `${getActionColor(log.action)}44`
+                                        }}>
+                                            {log.action}
+                                        </span>
+                                    </td>
+                                    <td style={{...styles.td, color: '#cbd5e1'}}>{log.details}</td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                )}
+            </div>
         </div>
-        <div style={styles.searchBox}>
-          <Search size={18} color="#64748b" />
-          <input
-            placeholder="Cauta in log-uri (Operator, Actiune...)"
-            style={styles.input}
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-          />
-        </div>
-      </header>
-
-      <div style={styles.tableWrapper}>
-        <table style={styles.table}>
-          <thead>
-            <tr>
-              <th style={styles.th}>
-                <Clock size={14} style={styles.iconInline} /> Data / Ora
-              </th>
-              <th style={styles.th}>
-                <User size={14} style={styles.iconInline} /> Operator
-              </th>
-              <th style={styles.th}>
-                <Activity size={14} style={styles.iconInline} /> Actiune
-              </th>
-              <th style={styles.th}>
-                <FileText size={14} style={styles.iconInline} /> Detalii
-                Suplimentare
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {filteredLogs.map((log: any) => (
-              <tr key={log.id || log.Id} style={styles.tr}>
-                <td style={styles.td}>
-                  {new Date(log.timestamp || log.Timestamp).toLocaleString(
-                    "ro-RO",
-                  )}
-                </td>
-                <td style={styles.td}>
-                  <span style={styles.opBadge}>
-                    {log.operatorId || log.OperatorId}
-                  </span>
-                </td>
-                <td style={styles.td}>
-                  <strong style={{ color: "#34d399" }}>
-                    {(log.action || log.Action || "").toUpperCase()}
-                  </strong>
-                </td>
-                <td style={styles.td}>{log.details || log.Details}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-
-        {filteredLogs.length === 0 && (
-          <div style={styles.emptyState}>
-            Nu exista inregistrari in jurnalul de audit care sa corespunda
-            cautarii.
-          </div>
-        )}
-      </div>
-    </div>
-  );
+    );
 }
 
 const styles: Record<string, React.CSSProperties> = {
   container: {
     padding: "30px",
-    color: "#f8fafc",
-    background: "#0f172a",
-    minHeight: "100vh",
+    color: "white",
   },
+
   header: {
     display: "flex",
     justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: "25px",
-    flexWrap: "wrap",
-    gap: "15px",
+    alignItems: "flex-start",
+    marginBottom: "30px",
   },
+
   title: {
     fontSize: "24px",
-    fontWeight: 700,
-    margin: 0,
-    letterSpacing: "-0.5px",
-  },
-  searchBox: {
+    fontWeight: "bold",
     display: "flex",
     alignItems: "center",
-    gap: 10,
-    background: "#1e293b",
-    padding: "8px 15px",
-    borderRadius: "10px",
-    border: "1px solid #334155",
+    margin: 0,
   },
-  input: {
-    background: "transparent",
-    border: "none",
-    color: "#fff",
-    outline: "none",
-    width: "280px",
+
+  subtitle: {
+    color: "#64748b",
     fontSize: "14px",
+    marginTop: "5px",
   },
+
+  badge: {
+    display: "flex",
+    alignItems: "center",
+    padding: "6px 12px",
+    background: "rgba(34,197,94,0.1)",
+    color: "#4ade80",
+    borderRadius: "6px",
+    fontSize: "12px",
+    fontWeight: "bold",
+    border: "1px solid rgba(34,197,94,0.2)",
+  },
+
   tableWrapper: {
-    background: "#111827",
+    background: "#1e293b",
     borderRadius: "12px",
     border: "1px solid #334155",
     overflow: "hidden",
-    boxShadow: "0 10px 15px -3px rgba(0, 0, 0, 0.1)",
   },
-  table: { width: "100%", borderCollapse: "collapse", textAlign: "left" },
+
+  table: {
+    width: "100%",
+    borderCollapse: "collapse",
+    textAlign: "left",
+    fontSize: "14px",
+  },
+
   th: {
-    padding: "15px",
-    background: "#1f2937",
+    padding: "15px 20px",
+    background: "#0f172a",
     color: "#94a3b8",
-    fontSize: "11px",
+    fontWeight: "600",
+    fontSize: "12px",
     textTransform: "uppercase",
-    letterSpacing: "0.1em",
-    borderBottom: "1px solid #334155",
+    letterSpacing: "0.05em",
   },
-  td: {
-    padding: "15px",
-    borderBottom: "1px solid #1f2937",
-    fontSize: "13px",
-    color: "#cbd5e1",
-  },
+
   tr: {
+    borderBottom: "1px solid #334155",
     transition: "background 0.2s",
-    cursor: "default",
   },
-  opBadge: {
-    background: "#064e3b",
-    color: "#34d399",
+
+  td: {
+    padding: "15px 20px",
+    verticalAlign: "middle",
+  },
+
+  operatorBadge: {
+    background: "#334155",
+    padding: "4px 8px",
+    borderRadius: "4px",
+    fontSize: "12px",
+    color: "#e2e8f0",
+  },
+
+  actionBadge: {
     padding: "4px 10px",
     borderRadius: "6px",
     fontSize: "11px",
-    fontWeight: 700,
-    fontFamily: "monospace",
-    border: "1px solid rgba(52, 211, 153, 0.2)",
-  },
-  iconInline: { marginBottom: "-2px", marginRight: "6px", opacity: 0.7 },
-  emptyState: {
-    padding: "60px",
-    textAlign: "center",
-    color: "#64748b",
-    fontSize: "14px",
-    background: "#111827",
+    fontWeight: "bold",
+    border: "1px solid",
   },
 };

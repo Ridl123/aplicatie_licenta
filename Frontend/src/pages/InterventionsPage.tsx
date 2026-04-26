@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from "react";
+import React, { useEffect, useState, useCallback, useMemo } from "react";
 import {
   MapContainer,
   TileLayer,
@@ -24,6 +24,8 @@ import {
   Clock,
 } from "lucide-react";
 import MarkerClusterGroup from "react-leaflet-cluster";
+import HeatmapLayer from "../HeatmapLayer"; // Asigură-te că ai creat acest fișier anterior
+import api from "../api/axiosConfig";
 
 type Call = {
   id: string;
@@ -79,18 +81,15 @@ const createLucideIcon = (type: string, isHighlighted: boolean) => {
 
   const iconHTML = renderToStaticMarkup(
     <div
+      className={isHighlighted ? "pulse-highlight" : ""}
       style={{
         color: "white",
         background: color,
         padding: "8px",
         borderRadius: "50%",
-        border: isHighlighted ? "4px solid #facc15" : "2px solid white",
+        border: isHighlighted ? "3px solid #facc15" : "2px solid white",
         display: "flex",
-        boxShadow: isHighlighted
-          ? "0 0 20px #facc15"
-          : "0 2px 5px rgba(0,0,0,0.4)",
-        transform: isHighlighted ? "scale(1.25)" : "scale(1)",
-        transition: "all 0.3s ease-in-out",
+        boxShadow: isHighlighted ? "none" : "0 2px 5px rgba(0,0,0,0.4)",
       }}
     >
       <IconComponent size={20} />
@@ -112,7 +111,8 @@ export default function InterventionsPage() {
   const [addressMap, setAddressMap] = useState<{ [key: string]: string }>({});
   const [searchQuery, setSearchQuery] = useState("");
 
-  const API_URL = "http://localhost:5023/api/Calls";
+  // --- STATE PENTRU HEATMAP ---
+  const [showHeatmap, setShowHeatmap] = useState(false);
 
   const fetchAddress = useCallback(
     async (lat: number, lon: number, id: string, force: boolean = false) => {
@@ -139,16 +139,20 @@ export default function InterventionsPage() {
     [addressMap],
   );
 
-  const fetchCalls = useCallback(() => {
-    fetch(`${API_URL}?t=${new Date().getTime()}`)
-      .then((res) => res.json())
-      .then((data) => {
-        const sorted = data.sort(
-          (a: any, b: any) =>
-            new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
-        );
-        setCalls(sorted.filter((c: any) => c.status !== "CLOSED").slice(0, 25));
-      });
+  const fetchCalls = useCallback(async () => {
+    try {
+      const response = await api.get("/Calls");
+      const data = response.data;
+
+      const sorted = data.sort(
+        (a: any, b: any) =>
+          new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+      );
+
+      setCalls(sorted.slice(0, 25));
+    } catch (error) {
+      console.error("Eroare la aducerea apelurilor:", error);
+    }
   }, []);
 
   useEffect(() => {
@@ -196,6 +200,11 @@ export default function InterventionsPage() {
     POLICE: calls.filter((c) => c.emergencyType === "POLICE").length,
   };
 
+  // --- EXTRAGEREA DATELOR PENTRU HEATMAP ---
+  const heatmapData: Array<[number, number, number]> = useMemo(() => {
+    return calls.map((c) => [c.latitude, c.longitude, 1]);
+  }, [calls]);
+
   return (
     <div
       style={{
@@ -227,6 +236,23 @@ export default function InterventionsPage() {
           >
             <ZoomOut size={18} /> <span className="hide-mobile">Reset</span>
           </button>
+
+          {/* --- BUTONUL DE COMUTARE HEATMAP --- */}
+          <button
+            type="button"
+            onClick={() => setShowHeatmap(!showHeatmap)}
+            style={{
+              ...styles.resetButton,
+              background: showHeatmap ? "#ef4444" : "#1e293b",
+              color: "white",
+              marginLeft: "auto", // Împinge butonul spre dreapta
+            }}
+          >
+            <Flame size={18} />
+            <span className="hide-mobile">
+              {showHeatmap ? "HARTĂ STANDARD" : "ANALIZĂ RISC (HEATMAP)"}
+            </span>
+          </button>
         </div>
         <div style={styles.statsRow}>
           <div style={{ ...styles.statBadge, borderLeft: "4px solid #f97316" }}>
@@ -257,7 +283,7 @@ export default function InterventionsPage() {
         center={[44.4355, 26.1025]}
         zoom={12}
         zoomControl={false}
-        style={{ height: "100%", width: "100%" }}
+        style={{ height: "100%", width: "100%", zIndex: 0 }}
       >
         <TileLayer
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
@@ -266,102 +292,137 @@ export default function InterventionsPage() {
         <ZoomControl position="bottomright" />
         <MapController center={selectedPos} resetTrigger={resetTrigger} />
 
-        {calls.length > 0 && (
-          <MarkerClusterGroup
-            chunkedLoading
-            maxClusterRadius={50}
-            spiderfyOnMaxZoom={true}
-            showCoverageOnHover={false}
-            zoomToBoundsOnClick={true}
-          >
-            {calls.map((call) => (
-              <Marker
-                key={call.id}
-                position={[call.latitude, call.longitude]}
-                icon={createLucideIcon(call.emergencyType, false)}
-              >
-                <Tooltip direction="top" offset={[0, -25]} opacity={1}>
-                  <div style={{ padding: "4px", minWidth: "140px" }}>
-                    <div
-                      style={{
-                        borderBottom: "1px solid #eee",
-                        marginBottom: "5px",
-                        fontWeight: "bold",
-                        color: "#1e293b",
-                        display: "flex",
-                        justifyContent: "space-between",
-                      }}
-                    >
-                      <span>{call.emergencyType}</span>
-                      <span style={{ fontSize: "10px", color: "#64748b" }}>
+        {/* --- RANDARE CONDIȚIONATĂ: HEATMAP vs MARKERI STANDARD --- */}
+        {showHeatmap ? (
+          <HeatmapLayer points={heatmapData} />
+        ) : (
+          calls.length > 0 && (
+            <MarkerClusterGroup
+              chunkedLoading
+              maxClusterRadius={50}
+              spiderfyOnMaxZoom={true}
+              showCoverageOnHover={false}
+              zoomToBoundsOnClick={true}
+            >
+              {calls.map((call) => (
+                <Marker
+                  key={call.id}
+                  position={[call.latitude, call.longitude]}
+                  icon={createLucideIcon(
+                    call.emergencyType,
+                    call.status === "IN_PROGRESS",
+                  )}
+                >
+                  <Tooltip direction="top" offset={[0, -25]} opacity={1}>
+                    <div style={{ padding: "4px", minWidth: "140px" }}>
+                      <div
+                        style={{
+                          borderBottom: "1px solid #eee",
+                          marginBottom: "5px",
+                          fontWeight: "bold",
+                          color: "#1e293b",
+                          display: "flex",
+                          justifyContent: "space-between",
+                        }}
+                      >
+                        <span>{call.emergencyType}</span>
+                        <span style={{ fontSize: "10px", color: "#64748b" }}>
+                          {new Date(call.createdAt).toLocaleTimeString(
+                            "ro-RO",
+                            {
+                              hour: "2-digit",
+                              minute: "2-digit",
+                            },
+                          )}
+                        </span>
+                      </div>
+                      <div
+                        style={{
+                          fontSize: "12px",
+                          color: "#334155",
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "4px",
+                        }}
+                      >
+                        <MapPin size={12} />{" "}
+                        {addressMap[call.id] || "Identificare..."}
+                      </div>
+                    </div>
+                  </Tooltip>
+                  <Popup>
+                    <div style={{ minWidth: "180px" }}>
+                      <h3
+                        style={{
+                          margin: "0 0 8px 0",
+                          color: "#ef4444",
+                          fontSize: "16px",
+                        }}
+                      >
+                        {call.emergencyType}
+                      </h3>
+                      <p
+                        style={{
+                          margin: "4px 0",
+                          fontSize: "13px",
+                          color:
+                            call.status === "IN_PROGRESS"
+                              ? "#22c55e"
+                              : "#e11d48",
+                          fontWeight: "bold",
+                        }}
+                      >
+                        Status: {call.status}
+                      </p>
+                      <p style={{ margin: "4px 0", fontSize: "13px" }}>
+                        <strong>Locație:</strong>{" "}
+                        {addressMap[call.id] || "Identificare..."}
+                      </p>
+                      <p style={{ margin: "4px 0", fontSize: "13px" }}>
+                        <Clock
+                          size={12}
+                          style={{ display: "inline", marginRight: "4px" }}
+                        />
+                        <strong>Ora:</strong>{" "}
                         {new Date(call.createdAt).toLocaleTimeString("ro-RO", {
                           hour: "2-digit",
                           minute: "2-digit",
                         })}
-                      </span>
+                      </p>
+                      <p style={{ margin: "4px 0", fontSize: "13px" }}>
+                        <strong>Contact:</strong> {call.callerNumber}
+                      </p>
+                      <p
+                        style={{
+                          margin: "8px 0 0 0",
+                          fontSize: "12px",
+                          color: "#64748b",
+                          fontStyle: "italic",
+                        }}
+                      >
+                        {call.description}
+                      </p>
                     </div>
-                    <div
-                      style={{
-                        fontSize: "12px",
-                        color: "#334155",
-                        display: "flex",
-                        alignItems: "center",
-                        gap: "4px",
-                      }}
-                    >
-                      <MapPin size={12} />{" "}
-                      {addressMap[call.id] || "Identificare..."}
-                    </div>
-                  </div>
-                </Tooltip>
-                <Popup>
-                  <div style={{ minWidth: "180px" }}>
-                    <h3
-                      style={{
-                        margin: "0 0 8px 0",
-                        color: "#ef4444",
-                        fontSize: "16px",
-                      }}
-                    >
-                      {call.emergencyType}
-                    </h3>
-                    <p style={{ margin: "4px 0", fontSize: "13px" }}>
-                      <strong>Locație:</strong>{" "}
-                      {addressMap[call.id] || "Identificare..."}
-                    </p>
-                    <p style={{ margin: "4px 0", fontSize: "13px" }}>
-                      <Clock
-                        size={12}
-                        style={{ display: "inline", marginRight: "4px" }}
-                      />
-                      <strong>Ora:</strong>{" "}
-                      {new Date(call.createdAt).toLocaleTimeString("ro-RO", {
-                        hour: "2-digit",
-                        minute: "2-digit",
-                      })}
-                    </p>
-                    <p style={{ margin: "4px 0", fontSize: "13px" }}>
-                      <strong>Contact:</strong> {call.callerNumber}
-                    </p>
-                    <p
-                      style={{
-                        margin: "8px 0 0 0",
-                        fontSize: "12px",
-                        color: "#64748b",
-                        fontStyle: "italic",
-                      }}
-                    >
-                      {call.description}
-                    </p>
-                  </div>
-                </Popup>
-              </Marker>
-            ))}
-          </MarkerClusterGroup>
+                  </Popup>
+                </Marker>
+              ))}
+            </MarkerClusterGroup>
+          )
         )}
       </MapContainer>
 
       <style>{`
+        /* --- Animația Pulse adăugată aici --- */
+        @keyframes pulse-ring {
+          0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(250, 204, 21, 0.8); }
+          70% { transform: scale(1.15); box-shadow: 0 0 0 15px rgba(250, 204, 21, 0); }
+          100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(250, 204, 21, 0); }
+        }
+        .pulse-highlight {
+          animation: pulse-ring 1.5s infinite;
+          border-radius: 50%;
+        }
+
         @media (max-width: 600px) { .hide-mobile { display: none; } .hide-text-mobile { display: none; } }
         .leaflet-bottom.leaflet-right { margin-bottom: 85px !important; margin-right: 12px !important; }
         .leaflet-control-attribution { background: rgba(255, 255, 255, 0.8) !important; padding: 2px 8px !important; font-size: 10px !important; }
