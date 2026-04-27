@@ -140,10 +140,13 @@ export default function OperatorDashboard() {
 
   useEffect(() => {
     const connection = new signalR.HubConnectionBuilder()
-      .withUrl("http://localhost:5023/callHub", {
-        skipNegotiation: true,
-        transport: signalR.HttpTransportType.WebSockets,
-      })
+      .withUrl(
+        "https://licenta-dug2g5c4anaxgke3.germanywestcentral-01.azurewebsites.net/callHub",
+        {
+          skipNegotiation: true,
+          transport: signalR.HttpTransportType.WebSockets,
+        },
+      )
       .withAutomaticReconnect()
       .build();
 

@@ -52,7 +52,7 @@ builder.Services.AddCors(options =>
     options.AddPolicy("AllowReactApp",
         policy =>
         {
-            policy.WithOrigins("http://localhost:5173") 
+            policy.SetIsOriginAllowed(origin => true) 
                   .AllowAnyHeader()
                   .AllowAnyMethod()
                   .AllowCredentials(); // Necesar pentru WebSockets/SignalR
@@ -61,10 +61,12 @@ builder.Services.AddCors(options =>
 
 var app = builder.Build();
 
-if (app.Environment.IsDevelopment()) {
+//if (app.Environment.IsDevelopment()) {
+// --- COD MODIFICAT TEMPORAR PENTRU DEPANARE ---
+    app.UseDeveloperExceptionPage(); // Asta ne va arăta eroarea exactă pe ecran!
     app.UseSwagger();
     app.UseSwaggerUI();
-}
+//}
 
 app.UseHttpsRedirection();
 
@@ -77,5 +79,20 @@ app.MapControllers();
 
 // --- MAPARE HUB SIGNALR ---
 app.MapHub<CallHub>("/callHub");
+
+// --- COD NOU PENTRU AZURE: Crearea automată a bazei de date ---
+using (var scope = app.Services.CreateScope())
+{
+    var services = scope.ServiceProvider;
+    try
+    {
+        var context = services.GetRequiredService<ApplicationDbContext>();
+        context.Database.Migrate(); // Aplică automat toate migrările (creează tabelele)
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine("Eroare la migrarea bazei de date: " + ex.Message);
+    }
+}
 
 app.Run();
