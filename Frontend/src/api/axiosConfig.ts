@@ -3,7 +3,8 @@ import axios from "axios";
 // Creăm o instanță de Axios cu setările de bază
 const api = axios.create({
   baseURL:
-    "https://licenta-dug2g5c4anaxgke3.germanywestcentral-01.azurewebsites.net/api",
+    //"https://licenta-dug2g5c4anaxgke3.germanywestcentral-01.azurewebsites.net/api",
+    "https://localhost:7293/api",
 });
 
 // INTERCEPTOR PENTRU REQUEST-URI

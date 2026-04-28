@@ -58,9 +58,14 @@ function MapController({
   return null;
 }
 
-const createLucideIcon = (type: string, isHighlighted: boolean) => {
+const createLucideIcon = (
+  type: string,
+  status: string,
+  isHighlighted: boolean,
+) => {
   let IconComponent;
   let color;
+
   switch (type?.toUpperCase()) {
     case "MEDICAL":
       IconComponent = Activity;
@@ -79,19 +84,26 @@ const createLucideIcon = (type: string, isHighlighted: boolean) => {
       color = "#94a3b8";
   }
 
+  if (status === "CLOSED") color = "#475569";
+
+  // Construim stilul sigur. Fără boxShadow aici.
+  const divStyle: React.CSSProperties = {
+    color: "white",
+    background: color,
+    padding: "8px",
+    borderRadius: "50%",
+    border: isHighlighted ? "3px solid #facc15" : "2px solid white",
+    display: "flex",
+    opacity: status === "CLOSED" ? 0.6 : 1,
+  };
+
+  // DOAR dacă NU pulsează, punem umbra standard.
+  if (!isHighlighted) {
+    divStyle.boxShadow = "0 2px 5px rgba(0,0,0,0.4)";
+  }
+
   const iconHTML = renderToStaticMarkup(
-    <div
-      className={isHighlighted ? "pulse-highlight" : ""}
-      style={{
-        color: "white",
-        background: color,
-        padding: "8px",
-        borderRadius: "50%",
-        border: isHighlighted ? "3px solid #facc15" : "2px solid white",
-        display: "flex",
-        boxShadow: isHighlighted ? "none" : "0 2px 5px rgba(0,0,0,0.4)",
-      }}
-    >
+    <div className={isHighlighted ? "pulse-highlight" : ""} style={divStyle}>
       <IconComponent size={20} />
     </div>,
   );
@@ -310,7 +322,8 @@ export default function InterventionsPage() {
                   position={[call.latitude, call.longitude]}
                   icon={createLucideIcon(
                     call.emergencyType,
-                    call.status === "IN_PROGRESS",
+                    call.status,
+                    call.status === "IN_PROGRESS" || call.status === "ACTIVE",
                   )}
                 >
                   <Tooltip direction="top" offset={[0, -25]} opacity={1}>

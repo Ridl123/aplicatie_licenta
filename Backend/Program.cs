@@ -11,8 +11,8 @@ var builder = WebApplication.CreateBuilder(args);
 
 // 1. Conexiunea la Baza de Date
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
+    //options.UseSqlServer("Server=tcp:bdlicenta.database.windows.net,1433;Initial Catalog=urgencydb;Persist Security Info=False;User ID=adminBD;Password=Rich@rdiulian3;MultipleActiveResultSets=False;Encrypt=True;TrustServerCertificate=False;Connection Timeout=30;"));
     options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
-
 // 2. Configurare Identity
 builder.Services.AddIdentity<ApplicationUser, IdentityRole>(options => {
     options.Password.RequiredLength = 6;
@@ -46,16 +46,16 @@ builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
-// --- MODIFICARE CORS (Esențial pentru SignalR) ---
+// --- MODIFICARE CORS (Esențial pentru SignalR și Vercel) ---
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowReactApp",
         policy =>
         {
-            policy.SetIsOriginAllowed(origin => true) 
+            policy.SetIsOriginAllowed(origin => true)
                   .AllowAnyHeader()
                   .AllowAnyMethod()
-                  .AllowCredentials(); // Necesar pentru WebSockets/SignalR
+                  .AllowCredentials(); // Necesar pentru SignalR
         });
 });
 

@@ -141,7 +141,8 @@ export default function OperatorDashboard() {
   useEffect(() => {
     const connection = new signalR.HubConnectionBuilder()
       .withUrl(
-        "https://licenta-dug2g5c4anaxgke3.germanywestcentral-01.azurewebsites.net/callHub",
+        //"https://licenta-dug2g5c4anaxgke3.germanywestcentral-01.azurewebsites.net/callHub",
+        "https://localhost:7293/callHub",
         {
           skipNegotiation: true,
           transport: signalR.HttpTransportType.WebSockets,
@@ -706,8 +707,17 @@ export default function OperatorDashboard() {
                 style={{
                   ...styles.listItem,
                   ...(c.id === selectedId ? styles.listItemSelected : {}),
+                  // Logica corectă a culorilor
                   borderLeftColor:
-                    c.status === "PENDING" ? "#e11d48" : "#22c55e",
+                    c.status === "CLOSED"
+                      ? "#475569" // Gri pt închise
+                      : c.status === "ACTIVE"
+                        ? "#22c55e" // Verde pt active
+                        : c.status === "IN_PROGRESS"
+                          ? "#3b82f6" // Albastru pt alocare
+                          : "#e11d48", // Roșu pt Pending
+                  // Facem cazurile închise transparente
+                  opacity: c.status === "CLOSED" ? 0.4 : 1,
                 }}
               >
                 <div style={styles.listTopRow}>
